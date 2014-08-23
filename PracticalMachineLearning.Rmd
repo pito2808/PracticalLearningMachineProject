@@ -1,0 +1,89 @@
+---
+title: "PracticalMachineLearning"
+output: html_document
+---
+
+### getting data
+download the data and read to data frame 
+the data come from [this source](http://groupware.les.inf.puc-rio.br/har).
+```{r, message=FALSE, warning=FALSE}
+urlfile <- 'http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv'
+training <- read.csv(urlfile)
+```
+
+### crossvalidation
+Split 60% data into training set and 40% to testing set
+```{r, message=FALSE,warning=FALSE}
+library(caret)
+set.seed(975)
+inTrain = createDataPartition(y=training$classe, p = 0.6, list=F)
+training00 <- training[inTrain,]
+testing00 <- training[-inTrain,]
+dim(training00); dim(testing00)
+```
+
+### cleaning and transforming data
+Remove columns which have 90% NAs values on their columns
+```{r}
+total_rows <- nrow(training00)
+
+pct_na <- function(x) {
+            return ((sum(is.na(x))/total_rows) > 0.9)
+}
+columns_na<- apply(training00, 2, pct_na)
+
+training.noNA <- training00[, !columns_na]
+```
+
+column 1:7 contains informations not useful for prediction
+such as username, x, timestamp etc
+so we remove column 1:7
+```{r}
+names(training.noNA)[1:7]
+training.noNA <- training.noNA[,8:93]
+dim(training.noNA)
+```
+
+remove all descriptive statistics columns such as
+min, max , amplitude, skewness, kurtosis
+
+```{r}
+training.noNA <- training.noNA[,-grep(('^min|^amplitude|^max|^skewnes|^kurtosis'), colnames(training.noNA))]
+dim(training.noNA)
+```
+
+remove correlation variables which are higher than 0.90 
+```{r}
+descrCor <- cor(training.noNA[, - 53])
+hiCorDescr <- findCorrelation(descrCor, cutoff = 0.90)
+training.noNA <- training.noNA[, - hiCorDescr]
+dim(training.noNA)
+```
+### prediction
+caret package have  random forest method which is not used here
+because it hangs on my laptop because of  resource issues.  
+So this command will not be used:  
+modFit <- train(classe ~ . , data = training.noNA, method ='rf',
+                prox = T)  
+                
+Package randomForest will be used instead. 
+We train the model with this package
+```{r, message=FALSE,warning=FALSE} 
+library(randomForest)
+modFit <- randomForest(classe ~ . , data = training.noNA,
+                       importance =T)
+```
+
+predict The testing set
+```{r}
+predTest <- predict(modFit, testing00)
+```
+
+### Cross-validation estimation error
+the OOB error is very good, we have a low error rate at 0.72%  
+the error matrix give 99.1% accuracy .
+
+```{r, message=FALSE, warning=FALSE}
+print(modFit)
+confusionMatrix(testing00$classe, predTest)
+```
